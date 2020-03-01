@@ -1,29 +1,14 @@
-//data "aws_ami" "ubuntu" {
-//  most_recent = true
-//
-//  filter {
-//    name   = "name"
-//    values = ["ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-*"]
-//    values = ["paravirtual"]
-//  }
-//
-//  owners = ["099720109477"]
-//}
 
 resource "aws_security_group" "openvpn" {
-  name        = "${var.name}"
-  vpc_id      = "${var.vpc_id}"
+  name        = var.name
+  vpc_id      = var.vpc_id
   description = "OpenVPN security group"
-
-  tags {
-    Name = "${var.name}"
-  }
 
   ingress {
     protocol    = -1
     from_port   = 0
     to_port     = 0
-    cidr_blocks = ["${var.vpc_cidr}"]
+    cidr_blocks = [var.vpc_cidr]
   }
 
   # For OpenVPN Client Web Server & Admin Web UI
@@ -57,8 +42,8 @@ resource "aws_security_group" "openvpn" {
 }
 
 resource "aws_ebs_volume" "openvpn_data" {
-  availability_zone = "${var.ebs_region}"
-  size              = "${var.ebs_size}"
+  availability_zone = var.ebs_region
+  size              = var.ebs_size
   encrypted         = true
 
   lifecycle {
@@ -67,22 +52,22 @@ resource "aws_ebs_volume" "openvpn_data" {
 }
 
 resource "aws_instance" "openvpn" {
-  ami           = "${var.ami}"
-  instance_type = "${var.instance_type}"
-  key_name      = "${var.key_name}"
-  subnet_id     = "${element(split(",", var.public_subnet_ids), count.index)}"
+  ami           = var.ami
+  instance_type = var.instance_type
+  key_name      = var.key_name
+  subnet_id     = element(var.public_subnet_ids, 0)
 
-  vpc_security_group_ids = ["${aws_security_group.openvpn.id}"]
+  vpc_security_group_ids = [aws_security_group.openvpn.id]
 
-  tags {
-    Name = "${var.name}"
+  tags = {
+    Name = var.name
   }
 }
 
 resource "aws_volume_attachment" "ebs_att" {
   device_name = "/dev/sdh"
-  instance_id = "${aws_instance.openvpn.id}"
-  volume_id   = "${aws_ebs_volume.openvpn_data.id}"
+  instance_id = aws_instance.openvpn.id
+  volume_id   = aws_ebs_volume.openvpn_data.id
 
   provisioner "local-exec" {
     command = "ansible-playbook --private-key ~/.ssh/id_rsa.pub -i '${aws_instance.openvpn.public_ip},' config/ansible/openvpn.yml"
@@ -90,9 +75,9 @@ resource "aws_volume_attachment" "ebs_att" {
 }
 
 resource "aws_route53_record" "openvpn" {
-  zone_id = "${var.route_zone_id}"
+  zone_id = var.route_zone_id
   name    = "vpn.${var.domain}"
   type    = "A"
   ttl     = "300"
-  records = ["${aws_instance.openvpn.public_ip}"]
+  records = [aws_instance.openvpn.public_ip]
 }
